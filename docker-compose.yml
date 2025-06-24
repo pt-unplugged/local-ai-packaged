@@ -1,3 +1,5 @@
+version: '3.9'
+
 include:
   - ./supabase/docker/docker-compose.yml
 
@@ -33,9 +35,14 @@ x-ollama: &service-ollama
   image: ollama/ollama:latest
   container_name: ollama
   restart: unless-stopped
-  expose:
-    - 11434/tcp
+  #expose:
+  #  - 11434/tcp
+  ports:
+    - "11434:11434"
   environment:
+    - NVIDIA_VISIBLE_DEVICES=all            # CHANGED: expose all GPUs
+    - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    - CUDA_VISIBLE_DEVICES=0
     - OLLAMA_CONTEXT_LENGTH=8192
     - OLLAMA_FLASH_ATTENTION=1
     - OLLAMA_KV_CACHE_TYPE=q8_0
@@ -56,6 +63,12 @@ x-init-ollama: &init-ollama
 services:
   flowise:
     image: flowiseai/flowise
+    gpus: all
+    devices:
+      - /dev/nvidia0
+      - /dev/nvidiactl
+      - /dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools
     restart: unless-stopped
     container_name: flowise
     expose:
@@ -74,8 +87,10 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     restart: unless-stopped
     container_name: open-webui
-    expose:
-      - 8080/tcp
+    #expose:
+    #  - 8080/tcp
+    ports:
+    - "3000:8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -107,6 +122,12 @@ services:
 
   qdrant:
     image: qdrant/qdrant
+    gpus: all
+    devices:
+      - /dev/nvidia0
+      - /dev/nvidiactl
+      - /dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools
     container_name: qdrant
     restart: unless-stopped
     expose:
@@ -355,44 +376,67 @@ services:
         max-size: "1m"
         max-file: "1"
 
-  ollama-cpu:
-    profiles: ["cpu"]
+  ollama:
     <<: *service-ollama
-
-  ollama-gpu:
-    profiles: ["gpu-nvidia"]
-    <<: *service-ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-
-  ollama-gpu-amd:
-    profiles: ["gpu-amd"]
-    <<: *service-ollama
-    image: ollama/ollama:rocm
+    gpus: all
     devices:
-      - "/dev/kfd"
-      - "/dev/dri"
+      - /dev/nvidia0
+      - /dev/nvidiactl
+      - /dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools
+    volumes:
+      - ollama_storage:/root/.ollama
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: all                    # CHANGED: reserve all GPUs
+#              capabilities: [gpu]
 
-  ollama-pull-llama-cpu:
-    profiles: ["cpu"]
+  ollama-pull-llama:
     <<: *init-ollama
     depends_on:
-      - ollama-cpu
+      - ollama
 
-  ollama-pull-llama-gpu:
-    profiles: ["gpu-nvidia"]
-    <<: *init-ollama
-    depends_on:
-      - ollama-gpu
+#  ollama-cpu:
+#    profiles: ["cpu"]
+#    <<: *service-ollama
 
-  ollama-pull-llama-gpu-amd:
-    profiles: [gpu-amd]
-    <<: *init-ollama
-    image: ollama/ollama:rocm
-    depends_on:
-     - ollama-gpu-amd
+#  ollama-gpu:
+#    profiles: ["gpu-nvidia"]
+#    <<: *service-ollama
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
+
+#  ollama-gpu-amd:
+#    profiles: ["gpu-amd"]
+#    <<: *service-ollama
+#    image: ollama/ollama:rocm
+#    devices:
+#      - "/dev/kfd"
+#      - "/dev/dri"
+
+#  ollama-pull-llama-cpu:
+#    profiles: ["cpu"]
+#    <<: *init-ollama
+#    depends_on:
+#      - ollama-cpu
+
+#  ollama-pull-llama-gpu:
+#    profiles: ["gpu-nvidia"]
+#    <<: *init-ollama
+#    depends_on:
+#      - ollama-gpu
+
+#  ollama-pull-llama-gpu-amd:
+#    profiles: [gpu-amd]
+#    <<: *init-ollama
+#    image: ollama/ollama:rocm
+#    depends_on:
+#     - ollama-gpu-amd
